@@ -1,28 +1,51 @@
-import { GraphQLClient, gql } from 'graphql-request';
 import crypto from 'crypto';
 import { initDb, saveReferendum, getUnanalyzed } from './db.ts';
 
-const POLKASSEMBLY_ENDPOINT = 'https://squid.subsquid.io/polkadot-polkassembly/graphql';
-
-const GET_LATEST_REFERENDA = gql`
-  query GetLatestReferenda {
-    posts(limit: 5, orderBy: created_at_DESC, where: {type_eq: ReferendumV2}) {
-      id
-      title
-      proposer
-      content
-      created_at
-      track_no
-      status
-    }
-  }
-`;
+const POLKASSEMBLY_API = 'https://api.polkassembly.io/api/v1/listing/on-chain-posts';
 
 async function fetchReferenda() {
-    console.log("Ingesting latest referenda from Polkadot...");
-    const client = new GraphQLClient(POLKASSEMBLY_ENDPOINT);
-    const data: any = await client.request(GET_LATEST_REFERENDA);
-    return data.posts;
+    console.log("Ingesting latest referenda from Polkassembly REST API...");
+    
+    // Headers required by Polkassembly
+    const headers = { 
+        'x-network': 'polkadot',
+        'Content-Type': 'application/json'
+    };
+    
+    // Query params
+    const params = new URLSearchParams({
+        proposalType: 'referendums_v2',
+        listingLimit: '5',
+        sortBy: 'newest',
+        trackStatus: 'All'
+    });
+
+    const url = `${POLKASSEMBLY_API}?${params.toString()}`;
+
+    try {
+        const response = await fetch(url, { headers });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+
+        const json: any = await response.json();
+        
+        // Map REST response to our schema
+        return json.posts.map((post: any) => ({
+            id: post.post_id, // REST uses post_id
+            title: post.title,
+            proposer: post.proposer,
+            content: post.content || post.description || "No content provided",
+            created_at: post.created_at,
+            track_no: post.track_no,
+            status: post.status
+        }));
+
+    } catch (error) {
+        console.error("Fetch error:", error);
+        throw error;
+    }
 }
 
 function generateHash(post: any) {
@@ -70,4 +93,5 @@ async function main() {
 main();
 
 // Optional: Interval loop
-// setInterval(main, 10 * 60 * 1000); // 10 minutes
+console.log("Starting Sentinel Ingestion Loop (Every 10 mins)...");
+setInterval(main, 10 * 60 * 1000); // 10 minutes

@@ -1,34 +1,60 @@
-import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
 
-const db = new Database('sentinel.db');
+const DB_PATH = path.join(process.cwd(), 'core', 'data', 'sentinel.json');
 
-export function initDb() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS referenda (
-      id INTEGER PRIMARY KEY,
-      post_id INTEGER UNIQUE,
-      title TEXT,
-      proposer TEXT,
-      content TEXT,
-      status TEXT,
-      track_no INTEGER,
-      evidence_hash TEXT,
-      risk_score INTEGER,
-      analyzed_at DATETIME
-    );
-  `);
-  console.log("Database initialized: sentinel.db");
+// Interface definition
+export interface Referendum {
+  id: number;
+  post_id: number;
+  title: string;
+  proposer: string;
+  content: string;
+  status: string;
+  track_no: number;
+  evidence_hash: string;
+  risk_score: number | null;
+  analyzed_at: string;
 }
 
-export function saveReferendum(ref: any) {
-  const stmt = db.prepare(`
-    INSERT OR IGNORE INTO referenda (post_id, title, proposer, content, status, track_no, evidence_hash, analyzed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  `);
-  
-  stmt.run(ref.id, ref.title, ref.proposer, ref.content, ref.status, ref.track_no, ref.evidence_hash);
+export function initDb() {
+  if (!fs.existsSync(path.dirname(DB_PATH))) {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  }
+  if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify([], null, 2));
+    console.log("Database initialized: sentinel.json");
+  }
+}
+
+export function saveReferendum(ref: Partial<Referendum>) {
+  const current: Referendum[] = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+  const index = current.findIndex(r => r.post_id === ref.post_id);
+
+  const newRef = {
+    ...ref,
+    risk_score: ref.risk_score || null,
+    analyzed_at: new Date().toISOString()
+  } as Referendum;
+
+  if (index >= 0) {
+    // Update existing (preserve risk score if not overwritten)
+    newRef.risk_score = current[index].risk_score || newRef.risk_score;
+    current[index] = newRef;
+  } else {
+    current.push(newRef);
+  }
+
+  fs.writeFileSync(DB_PATH, JSON.stringify(current, null, 2));
 }
 
 export function getUnanalyzed() {
-  return db.prepare('SELECT * FROM referenda WHERE risk_score IS NULL').all();
+  const current: Referendum[] = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+  return current.filter(r => r.risk_score === null);
+}
+
+export function getAllReferenda() {
+    if (!fs.existsSync(DB_PATH)) return [];
+    const current: Referendum[] = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+    return current.sort((a, b) => b.post_id - a.post_id);
 }

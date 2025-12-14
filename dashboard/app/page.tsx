@@ -1,5 +1,6 @@
 import React from 'react';
-import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -7,15 +8,23 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Read from the JSON file now
+async function getReferenda() {
+  try {
+     // Go up two levels from dashboard/app to root, then core/data/sentinel.json
+     const dbPath = path.join(process.cwd(), '..', 'core', 'data', 'sentinel.json');
+     if (!fs.existsSync(dbPath)) return [];
+     
+     const data = fs.readFileSync(dbPath, 'utf-8');
+     return JSON.parse(data).sort((a: any, b: any) => b.post_id - a.post_id);
+  } catch (e) {
+     console.error("Failed to read DB:", e);
+     return [];
+  }
+}
+
 export default async function RiskDashboard() {
-  // Connect to the memory DB
-  const db = new Database('../sentinel.db', { readonly: true });
-  
-  // Fetch referenda sorted by ID desc
-  const referenda = db.prepare(`
-    SELECT * FROM referenda 
-    ORDER BY id DESC
-  `).all();
+  const referenda = await getReferenda();
 
   return (
     <div className="min-h-screen bg-black text-green-500 font-mono p-8 selection:bg-green-900">
@@ -48,8 +57,6 @@ export default async function RiskDashboard() {
                  </tr>
               ) : (
                 referenda.map((ref: any) => {
-                  // Determine risk color
-                  // Assuming risk_score is 0-10 or null
                   let riskColor = "text-gray-500";
                   let riskLabel = "PENDING";
                   
@@ -82,9 +89,12 @@ export default async function RiskDashboard() {
                         {ref.proposer}
                       </td>
                       <td className="p-4">
-                         <code className="text-[10px] opacity-50 bg-green-950 px-1 rounded block w-24 truncate">
-                            {ref.evidence_hash}
-                         </code>
+                         <div className="flex items-center gap-1 group cursor-help" title={ref.evidence_hash}>
+                             <span className="text-[10px] opacity-70">SHA-256:</span>
+                             <code className="text-[10px] opacity-50 bg-green-950 px-1 rounded block w-20 truncate group-hover:w-auto group-hover:truncate-0 transition-all">
+                                {ref.evidence_hash}
+                             </code>
+                         </div>
                       </td>
                       <td className="p-4 text-right">
                          <div className="flex flex-col items-end">
