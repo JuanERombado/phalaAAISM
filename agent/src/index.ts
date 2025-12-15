@@ -74,6 +74,7 @@ import { nftGenerationPlugin } from "@elizaos/plugin-nft-generation";
 import { createNodePlugin } from "@elizaos/plugin-node";
 import { obsidianPlugin } from "@elizaos/plugin-obsidian";
 import { sgxPlugin } from "@elizaos/plugin-sgx";
+// import { polkadotPlugin } from "@elizaos/plugin-polkadot";
 import { solanaPlugin } from "@elizaos/plugin-solana";
 import { solanaAgentkitPlguin } from "@elizaos/plugin-solana-agentkit";
 import { autonomePlugin } from "@elizaos/plugin-autonome";

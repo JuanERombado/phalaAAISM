@@ -1,40 +1,50 @@
 import { IAgentRuntime, Memory, Provider, State } from "@elizaos/core";
-import { GraphQLClient, gql } from 'graphql-request';
 
-const POLKASSEMBLY_ENDPOINT = 'https://squid.subsquid.io/polkadot-polkassembly/graphql';
 
-const GET_LATEST_REFERENDA = gql`
-  query GetLatestReferenda {
-    posts(limit: 5, orderBy: created_at_DESC, where: {type_eq: ReferendumV2}) {
-      id
-      title
-      proposer
-      content
-      created_at
-      track_no
-      status
-    }
-  }
-`;
+const POLKASSEMBLY_API = 'https://api.polkassembly.io/api/v1/listing/on-chain-posts';
 
 const polkadotProvider: Provider = {
     get: async (_runtime: IAgentRuntime, _message: Memory, _state?: State) => {
         try {
-            const client = new GraphQLClient(POLKASSEMBLY_ENDPOINT);
-            const data: any = await client.request(GET_LATEST_REFERENDA);
+            console.log("Fetching Polkadot data via Polkassembly REST API...");
+            
+            // Headers for Polkassembly
+            const headers = { 
+                'x-network': 'polkadot',
+                'Content-Type': 'application/json'
+            };
+            
+            // Query params
+            const params = new URLSearchParams({
+                proposalType: 'referendums_v2',
+                listingLimit: '5',
+                sortBy: 'newest',
+                trackStatus: 'All'
+            });
 
-            if (!data.posts || data.posts.length === 0) {
+            const url = `${POLKASSEMBLY_API}?${params.toString()}`;
+            
+            const response = await fetch(url, { headers });
+            
+            if (!response.ok) {
+                 return "Error: Failed to fetch from Polkassembly API (" + response.status + ")";
+            }
+
+            const json: any = await response.json();
+            const posts = json.posts;
+
+            if (!posts || posts.length === 0) {
                 return "No active Polkadot referenda found.";
             }
 
-            let report = "## Active OpenGov Referenda (Ingested via GraphQL)\n\n";
+            let report = "## Active OpenGov Referenda (Live Data)\n\n";
 
-            data.posts.forEach((post: any) => {
+            posts.forEach((post: any) => {
                 const title = post.title || "No Title";
-                const content = post.content || "No content available.";
+                const content = post.content || post.description || "No content available.";
                 const shortContent = content.length > 500 ? content.substring(0, 500) + "..." : content;
 
-                report += `### Referendum #${post.id}\n`;
+                report += `### Referendum #${post.post_id}\n`;
                 report += `**Title**: ${title}\n`;
                 report += `**Proposer**: ${post.proposer}\n`;
                 report += `**Status**: ${post.status}\n`;
@@ -45,7 +55,7 @@ const polkadotProvider: Provider = {
 
             return report;
         } catch (error) {
-            console.error("Error fetching referenda via GraphQL:", error);
+            console.error("Error fetching referenda:", error);
             return "Error fetching Polkadot referenda data. Please check logs.";
         }
     }
